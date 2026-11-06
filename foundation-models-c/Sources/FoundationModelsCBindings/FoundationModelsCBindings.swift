@@ -1781,11 +1781,16 @@ final class BridgedTool: Tool {
   func call(arguments: GeneratedContent) async throws -> String {
     let arguments = GeneratedContentWrapper(content: arguments)
     let id = nextID()
-    foreignCall(FMGeneratedContentRef(Unmanaged.passRetained(arguments).toOpaque()), id)
     return try await withCheckedThrowingContinuation { continuation in
+      // Register the continuation before handing the call to the foreign side.
+      // The foreign callback may finish (and call `FMBridgedToolFinishCall`)
+      // on another thread before `foreignCall` even returns; if the
+      // continuation were not registered yet, the result would be dropped and
+      // this call would never resume.
       outputContinuation.withLock {
         $0[id] = continuation
       }
+      foreignCall(FMGeneratedContentRef(Unmanaged.passRetained(arguments).toOpaque()), id)
     }
   }
 }
